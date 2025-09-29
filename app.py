@@ -5,18 +5,31 @@ from torchvision.models import ResNet18_Weights
 from PIL import Image
 import os
 from flask import Flask, request, jsonify, render_template
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
 device = torch.device("cpu")
-print(f"Using device: {device}")
+logger.info(f"Using device: {device}")
 
-data_dir = 'data/train'
-if not os.path.exists(data_dir):
-    raise FileNotFoundError(f"Dataset directory {data_dir} not found. Check your file structure.")
-class_names = sorted(os.listdir(data_dir))
+class_names = [
+    'Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
+    'Blueberry___healthy', 'Cherry___healthy', 'Cherry___Powdery_mildew',
+    'Corn___Cercospora_leaf_spot Gray_leaf_spot', 'Corn___Common_rust', 'Corn___healthy',
+    'Corn___Northern_Leaf_Blight', 'Grape___Black_rot', 'Grape___Esca_(Black_Measles)',
+    'Grape___healthy', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)', 'Orange___Haunglongbing_(Citrus_greening)',
+    'Peach___Bacterial_spot', 'Peach___healthy', 'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy',
+    'Potato___Early_blight', 'Potato___healthy', 'Potato___Late_blight', 'Raspberry___healthy',
+    'Soybean___healthy', 'Squash___Powdery_mildew', 'Strawberry___healthy', 'Strawberry___Leaf_scorch',
+    'Tomato___Bacterial_spot', 'Tomato___Early_blight', 'Tomato___healthy', 'Tomato___Late_blight',
+    'Tomato___Leaf_Mold', 'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite',
+    'Tomato___Target_Spot', 'Tomato___Tomato_mosaic_virus', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus'
+]
 num_classes = len(class_names)
-print(f"Loaded {num_classes} classes: {class_names[:5]}...")
+logger.info(f"Loaded {num_classes} classes: {class_names[:5]}...")
 
 class_label_map = {
     'Apple___healthy': 'Healthy Apple',
@@ -33,17 +46,23 @@ class_label_map = {
     'Tomato___Target_Spot': 'Tomato Target Spot',
     'Tomato___Tomato_Yellow_Leaf_Curl_Virus': 'Tomato Yellow Leaf Curl Virus',
     'Tomato___Tomato_mosaic_virus': 'Tomato Mosaic Virus',
+    # Add other mappings as needed
 }
 
+# Load model
 model = models.resnet18(weights=None).to(device)
 model.fc = nn.Linear(model.fc.in_features, num_classes)
-model_path = 'resnet18.pth'
-if not os.path.exists(model_path):
-    raise FileNotFoundError(f"Model file {model_path} not found. Available models: {os.listdir('.')} (look for .pth files)")
-state_dict = torch.load(model_path, map_location=device)
-model.load_state_dict(state_dict)
-model.eval()
-print("Model loaded successfully!")
+model_path = '/app/models/resnet18.pth'  # Render disk path
+try:
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file {model_path} not found. Available files: {os.listdir('/app/models')}")
+    state_dict = torch.load(model_path, map_location=device)
+    model.load_state_dict(state_dict)
+    model.eval()
+    logger.info("Model loaded successfully!")
+except Exception as e:
+    logger.error(f"Error loading model: {e}")
+    raise
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -85,7 +104,12 @@ def predict():
         
         return jsonify({'message': message, 'confidence': f"{confidence_score:.4f}"})
     except Exception as e:
+        logger.error(f"Prediction error: {e}")
         return jsonify({'error': str(e)}), 500
+    finally:
+        if os.path.exists(image_path):
+            os.remove(image_path)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.getenv('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False)
