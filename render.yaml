@@ -2,8 +2,6 @@ services:
   - type: web
     name: plant-disease-detection 
     env: python
-    buildCommand: pip install -r requirements.txt
+    runtime: python-3.11 
+    buildCommand: pip install torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu && pip install -r requirements.txt
     startCommand: python3 app.py
-    envVars:
-      - key: PORT
-        value: 10000
