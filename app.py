@@ -52,17 +52,31 @@ class_label_map = {
 # Load model
 model = models.resnet18(weights=None).to(device)
 model.fc = nn.Linear(model.fc.in_features, num_classes)
-model_path = '/app/models/resnet18.pth'  # Render disk path
-try:
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file {model_path} not found. Available files: {os.listdir('/app/models')}")
-    state_dict = torch.load(model_path, map_location=device)
-    model.load_state_dict(state_dict)
-    model.eval()
-    logger.info("Model loaded successfully!")
-except Exception as e:
-    logger.error(f"Error loading model: {e}")
-    raise
+
+# Try multiple model paths for different deployment environments
+model_paths = [
+    'resnet18.pth',  # Local development
+    '/app/resnet18.pth',  # Render deployment
+    './resnet18.pth'  # Alternative path
+]
+
+model_loaded = False
+for model_path in model_paths:
+    try:
+        if os.path.exists(model_path):
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.eval()
+            logger.info(f"Model loaded successfully from {model_path}!")
+            model_loaded = True
+            break
+    except Exception as e:
+        logger.warning(f"Failed to load model from {model_path}: {e}")
+        continue
+
+if not model_loaded:
+    logger.error("Could not load model from any path. Available files: " + str(os.listdir('.')))
+    raise FileNotFoundError("Model file not found in any expected location")
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
